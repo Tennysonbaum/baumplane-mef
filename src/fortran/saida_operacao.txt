@@ -1,0 +1,14 @@
+BaumPlane_colector: MEF 1D em Fortran (operacao, placa a 60 C, mantissa de 53 bits)
+  placa T(L1)         = 60.000 C   (Tmax no absorvedor 60.000057 C)
+  h camara            = 3.427 W/m2K, k1 equivalente = .0956 W/mK, h externo = 15.46 W/m2K
+  balanco             : frente 97.31 + fundo 42.42 + fluido 558.78 = S 698.52 W/m2 (residuo  1.1E-12)
+  U frente + fundo    = 2.7803 + 1.2121 = 3.9925 W/m2K
+
+   n    nos   h_II (mm)   erro nodal max (K)   E_r (L2)      p
+    1     14     0.40000             5.23E-11    3.96E-08       -
+    2     27     0.20000             9.98E-10    9.90E-09    2.00
+    4     53     0.10000             4.03E-10    2.48E-09    2.00
+    8    105     0.05000             7.38E-08    1.13E-09    1.13  (arredondamento)
+   16    209     0.02500             5.78E-08    8.33E-10    0.44  (arredondamento)
+   32    417     0.01250             1.33E-06    1.84E-08   -4.47  (arredondamento)
+   64    833     0.00625             5.95E-07    8.24E-09    1.16  (arredondamento)

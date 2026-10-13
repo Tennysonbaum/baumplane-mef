@@ -43,14 +43,14 @@ contains
     real(wp), intent(in) :: Tp, Tg, L, b
     real(wp) :: TmK, k, nu, a, dT, Ra, c, t1, Nus   ! Fortran não diferencia maiúsculas: Nu seria nu
     TmK = (Tp + Tg)/2 + 273.15_wp
-    k = 0.0241_wp*(TmK/273.15_wp)**0.81_wp
-    nu = 1.33e-5_wp*(TmK/273.15_wp)**1.75_wp
+    k = 0.0241_wp*potr(TmK/273.15_wp, 0.81_wp)
+    nu = 1.33e-5_wp*potr(TmK/273.15_wp, 1.75_wp)
     a = nu/0.71_wp
     dT = max(abs(Tp - Tg), 1e-6_wp)
     Ra = 9.81_wp/TmK*dT*L*L*L/(nu*a)
-    c = cos(b*PI/180)
+    c = cosr(b*PI/180)
     t1 = max(0._wp, 1 - 1708/(Ra*c))
-    Nus = 1 + 1.44_wp*(1 - 1708*sin(1.8_wp*b*PI/180)**1.6_wp/(Ra*c))*t1 + max(0._wp, (Ra*c/5830)**(1._wp/3) - 1)
+    Nus = 1 + 1.44_wp*(1 - 1708*potr(sinr(1.8_wp*b*PI/180), 1.6_wp)/(Ra*c))*t1 + max(0._wp, potr(Ra*c/5830, 1._wp/3) - 1)
     hGap = Nus*k/L
   end function
 
@@ -60,6 +60,102 @@ contains
     a = T1 + 273.15_wp; b = T2 + 273.15_wp
     hRad = SIG*(a*a + b*b)*(a + b)/(1/e1 + 1/e2 - 1)
   end function
+
+  ! ---------- potência, seno, cosseno e raiz ----------
+  ! Normalmente são as funções intrínsecas. Com -DMATEMATICA_PROPRIA usam séries em aritmética pura, para o
+  ! núcleo em WebAssembly com precisão quádrupla (o flang 18 ainda não tem biblioteca matemática de kind 16).
+  real(wp) function potr(x, y)                  ! x**y, x > 0
+    real(wp), intent(in) :: x, y
+#ifdef MATEMATICA_PROPRIA
+    potr = mexp(y*mlog(x))
+#else
+    potr = x**y
+#endif
+  end function
+  real(wp) function cosr(x)
+    real(wp), intent(in) :: x
+#ifdef MATEMATICA_PROPRIA
+    cosr = taylor(x, 0)
+#else
+    cosr = cos(x)
+#endif
+  end function
+  real(wp) function sinr(x)
+    real(wp), intent(in) :: x
+#ifdef MATEMATICA_PROPRIA
+    sinr = taylor(x, 1)
+#else
+    sinr = sin(x)
+#endif
+  end function
+  real(wp) function raiz(x)
+    real(wp), intent(in) :: x
+#ifdef MATEMATICA_PROPRIA
+    integer :: i
+    raiz = 0
+    if (x <= 0) return
+    raiz = real(sqrt(real(x, real64)), wp)    ! chute em dupla e Newton (cada passo dobra os dígitos)
+    do i = 1, 3
+      raiz = (raiz + x/raiz)/2
+    end do
+#else
+    raiz = sqrt(x)
+#endif
+  end function
+#ifdef MATEMATICA_PROPRIA
+  real(wp) function taylor(x, m)                ! m = 0: cos x, m = 1: sen x; |x| até uns 2*pi
+    real(wp), intent(in) :: x
+    integer, intent(in) :: m
+    real(wp) :: termo
+    integer :: n
+    termo = 1
+    if (m == 1) termo = x
+    taylor = termo
+    do n = m + 2, 90, 2
+      termo = -termo*x*x/(n*(n - 1))
+      taylor = taylor + termo
+    end do
+  end function
+  real(wp) function mlog(x)                     ! ln x = k ln 2 + 2 atanh((y - 1)/(y + 1)), y em [1, 2)
+    real(wp), intent(in) :: x
+    real(wp), parameter :: LN2 = 0.693147180559945309417232121458176568_wp
+    real(wp) :: y, z, z2, termo
+    integer :: k, n
+    y = x; k = 0
+    do while (y >= 2)
+      y = y/2; k = k + 1
+    end do
+    do while (y < 1)
+      y = y*2; k = k - 1
+    end do
+    z = (y - 1)/(y + 1); z2 = z*z; termo = z; mlog = 0
+    do n = 1, 81, 2
+      mlog = mlog + termo/n; termo = termo*z2
+    end do
+    mlog = k*LN2 + 2*mlog
+  end function
+  real(wp) function mexp(x)                     ! e**x = 2**k e**r, e**r pela série de r/16 e quatro quadrados
+    real(wp), intent(in) :: x
+    real(wp), parameter :: LN2 = 0.693147180559945309417232121458176568_wp
+    real(wp) :: r, termo
+    integer :: k, n
+    k = int(x/LN2); r = (x - k*LN2)/16
+    termo = 1; mexp = 1
+    do n = 1, 30
+      termo = termo*r/n; mexp = mexp + termo
+    end do
+    do n = 1, 4
+      mexp = mexp*mexp
+    end do
+    do n = 1, abs(k)
+      if (k > 0) then
+        mexp = mexp*2
+      else
+        mexp = mexp/2
+      end if
+    end do
+  end function
+#endif
 
   ! ---------- solução analítica: sistema 6×6 (Apêndice A) ----------
   real(wp) function T_an(s, x)
@@ -77,25 +173,30 @@ contains
   function analitica6(k1, k2, k3, L1, L2, L3, he, hi, Tinf, q) result(s)
     real(wp), intent(in) :: k1, k2, k3, L1, L2, L3, he, hi, Tinf, q
     type(analitica) :: s
-    real(wp) :: M(6, 6), b(6), f, t(6), tb
+    real(wp) :: M(6, 6), b(6), f, tb
     integer :: c, r, p, k
-    M = reshape([real(wp) :: k1, -he, 0, 0, 0, 0, &
-                 0, 0, 0, 0, -(k3 + hi*L3), -hi, &
-                 L1, 1, -L1, -1, 0, 0, &
-                 -k1, 0, k2, 0, 0, 0, &
-                 0, 0, L2, 1, -L2, -1, &
-                 0, 0, -k2, 0, k3, 0], [6, 6], order=[2, 1])
-    b = [-he*Tinf, -hi*Tinf, -q*L1*L1/(2*k2), q*L1, q*L2*L2/(2*k2), -q*L2]
+    M = 0                                       ! (sem reshape: o núcleo não depende da biblioteca do Fortran)
+    M(1, 1) = k1; M(1, 2) = -he
+    M(2, 5) = -(k3 + hi*L3); M(2, 6) = -hi
+    M(3, 1) = L1; M(3, 2) = 1; M(3, 3) = -L1; M(3, 4) = -1
+    M(4, 1) = -k1; M(4, 3) = k2
+    M(5, 3) = L2; M(5, 4) = 1; M(5, 5) = -L2; M(5, 6) = -1
+    M(6, 3) = -k2; M(6, 5) = k3
+    b(1) = -he*Tinf; b(2) = -hi*Tinf; b(3) = -q*L1*L1/(2*k2); b(4) = q*L1; b(5) = q*L2*L2/(2*k2); b(6) = -q*L2
     do c = 1, 6                                 ! Gauss com pivotamento parcial
       p = c
       do r = c + 1, 6
         if (abs(M(r, c)) > abs(M(p, c))) p = r
       end do
-      t = M(c, :); M(c, :) = M(p, :); M(p, :) = t
+      do k = 1, 6
+        tb = M(c, k); M(c, k) = M(p, k); M(p, k) = tb
+      end do
       tb = b(c); b(c) = b(p); b(p) = tb
       do r = c + 1, 6
         f = M(r, c)/M(c, c)
-        M(r, c:) = M(r, c:) - f*M(c, c:)
+        do k = c, 6
+          M(r, k) = M(r, k) - f*M(c, k)
+        end do
         b(r) = b(r) - f*b(c)
       end do
     end do
@@ -128,9 +229,9 @@ contains
     real(wp), intent(in) :: x(:)
     integer, intent(in) :: N
     real(wp), intent(out) :: T(:)
-    real(wp) :: a(N), d(N), c(N), F(N), xm, Le, k, qv, st, fe, m
+    real(wp) :: a(NODES), d(NODES), c(NODES), F(NODES), xm, Le, k, qv, st, fe, m
     integer :: e, i
-    a = 0; d = 0; c = 0; F = 0
+    a(1:N) = 0; d(1:N) = 0; c(1:N) = 0; F(1:N) = 0
     do e = 1, N - 1
       xm = (x(e) + x(e + 1))/2; Le = x(e + 1) - x(e)
       if (xm < s%L1) then; k = s%k1; else if (xm < s%L2) then; k = s%k2; else; k = s%k3; end if
@@ -151,9 +252,9 @@ contains
   end subroutine
 
   ! ---------- montagem com ponto fixo dos coeficientes ----------
-  function montar(P, qExtr) result(C)
+  subroutine montar(P, qExtr, C)                ! (sub-rotina: sem cópia de tipo derivado pela biblioteca do Fortran)
     real(wp), intent(in) :: P(NPAR), qExtr
-    type(caso) :: C
+    type(caso), intent(out) :: C
     real(wp) :: eg_, Lg, ea, L1, L2, L3, Sabs, qv, Tp, Tg, To, hg, k1, A, B, he, nTp, nTo, nTg, dd
     type(analitica) :: s
     integer :: it
@@ -173,9 +274,11 @@ contains
       if (dd < 1e-12_wp) exit
     end do
     C%s = s; C%hg = hg; C%qExtr = qExtr; C%Sabs = Sabs; C%Tp = Tp
-  end function
+  end subroutine
 end module baumplane
 
+#ifndef SO_MODULO
+! (baumplane_wasm.F90 define SO_MODULO e aproveita só o módulo acima)
 program baumplane_mef_f
   use baumplane
   implicit none
@@ -216,14 +319,14 @@ program baumplane_mef_f
     read (v, *) P(j)
   end do
 
-  C = montar(P, 0._wp)
+  call montar(P, 0._wp, C)
   if (op) then                                   ! extração que deixa a placa a 60 °C (bissecção)
     if (C%Tp <= 60) then
       print '(a)', 'Em estagnacao a placa nao chega a 60 C; mostrando estagnacao.'
     else
       lo = 0; hi_ = C%Sabs
       do i = 1, 80
-        m = (lo + hi_)/2; C = montar(P, m)
+        m = (lo + hi_)/2; call montar(P, m, C)
         if (C%Tp > 60) then; lo = m; else; hi_ = m; end if
       end do
     end if
@@ -486,3 +589,4 @@ contains
     quadErr = (b - a)/2*quadErr
   end function
 end program
+#endif

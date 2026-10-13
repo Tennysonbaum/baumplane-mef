@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>BaumPlane_MEF (C++)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b5561c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BaumPlane MEF">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>BaumPlane_MEF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: bancada de ensaio — coluna de entradas à esquerda, laudo e gráfico à direita; empilha no celular */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #1d2421; --muted: #5d6863; --line: #d9dfdb;
+  --accent: #b5561c;
+  --s1: #2a78d6; --s2: #eb6834;
+  --ok: #1d7a4a; --warn: #9a6a00; --bad: #b42318;
+  --ok-bg: #e4f3ea; --warn-bg: #fbf1d9; --bad-bg: #fbe6e3;
+  --f-display: "Fraunces", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --panel: #1c211f; --fg: #e8ece9; --muted: #a2aca7; --line: #2f3733;
+  --accent: #e07b3c; --s1: #3987e5; --s2: #d95926;
+  --ok: #5cc98d; --warn: #e5b440; --bad: #f2786b;
+  --ok-bg: #173226; --warn-bg: #352a10; --bad-bg: #3a1a17; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141816; --panel: #1c211f; --fg: #e8ece9; --muted: #a2aca7; --line: #2f3733;
+  --accent: #e07b3c; --s1: #3987e5; --s2: #d95926;
+  --ok: #5cc98d; --warn: #e5b440; --bad: #f2786b;
+  --ok-bg: #173226; --warn-bg: #352a10; --bad-bg: #3a1a17; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); padding: 24px 16px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header h1 { font: 600 clamp(24px, 3.4vw, 34px)/1.15 var(--f-display); margin: 0 0 6px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.grid { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+fieldset { border: 0; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+legend { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; padding: 0; grid-column: 1 / -1; }
+label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+label .tag { font-family: var(--f-mono); font-size: 10px; color: var(--accent); }
+input, select { font: 500 13px var(--f-mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.full { grid-column: 1 / -1; }
+.verdict { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: 10px; }
+.verdict.ok { background: var(--ok-bg); } .verdict.warn { background: var(--warn-bg); } .verdict.bad { background: var(--bad-bg); }
+.verdict .icon { font: 600 22px/1 var(--f-mono); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--panel); }
+.ok .icon { background: var(--ok); } .warn .icon { background: var(--warn); } .bad .icon { background: var(--bad); }
+.verdict h2 { margin: 0 0 2px; font: 600 18px var(--f-display); }
+.verdict p { margin: 0; max-width: 75ch; }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
+.check { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.check .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.check .v { font: 500 18px var(--f-mono); font-variant-numeric: tabular-nums; }
+.check .s { font-size: 12px; color: var(--muted); }
+.pill { display: inline-block; font: 600 11px var(--f-body); padding: 1px 8px; border-radius: 99px; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+h3 { font: 600 15px var(--f-body); margin: 18px 0 8px; }
+.chart { position: relative; }
+svg text { fill: var(--muted); font: 11px var(--f-body); }
+.leg { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.leg i { display: inline-block; width: 16px; height: 2px; vertical-align: middle; margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: 12px var(--f-mono); box-shadow: 0 2px 8px rgb(0 0 0 / .12); white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+td { font-family: var(--f-mono); }
+.note { font-size: 12px; color: var(--muted); max-width: 80ch; }
+.note b { color: var(--fg); font-weight: 500; }
+.suite, .fem { display: grid; gap: 12px; }
+.fem { grid-template-columns: minmax(0, 1fr); }
+.fem h3 { margin: 6px 0 0; }
+.fem-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 10px; max-width: 640px; }
+.suite-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, .filebtn { font: 500 13px var(--f-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.filebtn input { display: none; }
+.summary { font-size: 13px; color: var(--muted); }
+.summary b { color: var(--fg); }
+#suiteTbl td.n { text-align: left; font-family: var(--f-body); white-space: normal; min-width: 180px; }
+#suiteTbl tr.sel td { background: var(--bg); }
+#suiteTbl tbody tr { cursor: pointer; }
+.hip { font-size: 11px; color: var(--muted); font-family: var(--f-body); }
+pre.tpl { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12px/1.5 var(--f-mono); overflow-x: auto; margin: 0; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+</style>
+<style>
+.core { display: inline-flex; gap: 8px; align-items: center; font: 500 12px var(--f-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; margin-top: 10px; }
+.core i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.core.on i { background: var(--ok); } .core.err i { background: var(--bad); }
+pre.cli { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12px/1.5 var(--f-mono); overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-all; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; grid-column: 1 / -1; }
+.seg label { flex: 1; display: block; text-align: center; padding: 6px 4px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.seg input { display: none; }
+.seg label:has(input:checked) { background: var(--accent); color: #fff; }
+#out .checks { margin-top: 0; }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>BaumPlane_MEF</h1>
+  <p>Condução de calor 1D em regime permanente num coletor solar plano, pelo modelo por regiões do TCC: solução analítica (sistema 6×6) e método dos elementos finitos linear, com estudo de convergência. O cálculo roda num núcleo em C++ compilado para WebAssembly, o mesmo código do programa de linha de comando.</p>
+  <span class="core" id="core"><i></i><span>carregando núcleo C++…</span></span>
+  <p style="margin-top:8px;font-size:13px"><a href="./" style="color:var(--muted)">voltar para a versão com o núcleo em Fortran</a></p>
+</header>
+
+<div class="grid">
+<form class="panel" id="f" autocomplete="off">
+  <fieldset>
+    <legend>Coletor</legend>
+    <label class="full">Exemplo
+      <select id="preset"></select>
+    </label>
+    <div class="seg" role="radiogroup" aria-label="Caso">
+      <label><input type="radio" name="modo" value="0" checked>Estagnação</label>
+      <label><input type="radio" name="modo" value="1">Operação</label>
+    </div>
+    <label>T placa na operação (°C) <input id="Tref" type="number" step="1" value="60"></label>
+    <label>Malha até n = <select id="nmax"><option>16</option><option>32</option><option selected>64</option></select></label>
+  </fieldset>
+  <fieldset>
+    <legend>Região I: vidro e câmara de ar</legend>
+    <label>Vidro (mm) <input id="eg" type="number" step="0.1"></label>
+    <label>k vidro (W/mK) <input id="kg" type="number" step="0.05"></label>
+    <label>ε vidro <input id="epsg" type="number" step="0.01"></label>
+    <label>τ vidro <input id="tau" type="number" step="0.01"></label>
+    <label>Câmara de ar (mm) <input id="gap" type="number" step="1"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Região II: absorvedor</legend>
+    <label>Espessura (mm) <input id="eabs" type="number" step="0.05"></label>
+    <label>k (W/mK) <input id="kabs" type="number" step="1"></label>
+    <label>α <input id="alpha" type="number" step="0.01"></label>
+    <label>ε <input id="eps" type="number" step="0.01"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Região III: isolamento</legend>
+    <label>Espessura (mm) <input id="eiso" type="number" step="1"></label>
+    <label>k (W/mK) <input id="kiso" type="number" step="0.001"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Condições</legend>
+    <label>G (W/m²) <input id="G" type="number" step="50"></label>
+    <label>Tₐ (°C) <input id="Ta" type="number" step="1"></label>
+    <label>h vento (W/m²K) <input id="hw" type="number" step="0.5"></label>
+    <label>h traseiro (W/m²K) <input id="hi" type="number" step="0.5"></label>
+    <label>Inclinação (°) <input id="beta" type="number" step="5"></label>
+  </fieldset>
+  <p class="note">Câmara de ar por Hollands (Duffie e Beckman, eq. 3.11.4) com radiação entre placas; face externa com convecção e radiação linearizada para o céu à temperatura ambiente; (τα) = 1,01τα. Os coeficientes são atualizados por ponto fixo até convergir.</p>
+</form>
+
+<div class="panel" id="out">
+  <div class="checks" id="checks"></div>
+  <h3>Perfil de temperatura</h3>
+  <div class="leg"><span><i style="background:var(--s1)"></i>Analítica (6×6)</span><span><i style="background:var(--s2);height:8px;width:8px;border-radius:50%"></i>Nós do MEF, n = 1</span></div>
+  <div class="chart" id="chart"></div>
+  <h3>Convergência do MEF</h3>
+  <div class="tablewrap"><table id="tbl"></table></div>
+  <p class="note" style="margin-top:12px"><b>Como ler.</b> Em 1D, o MEF linear coincide com a solução exata nos nós e o erro L² cai com h² (p = 2). Quando p deixa de ser 2 nas malhas finas, o erro chegou ao arredondamento da aritmética de dupla precisão. O programa de linha de comando compilado com <code>-DESTENDIDA</code> (long double) empurra esse piso de n = 8 para n = 64, como no TCC.</p>
+  <h3>Mesmo cálculo na linha de comando</h3>
+  <pre class="cli" id="cli"></pre>
+</div>
+</div>
+</div>
+
+<script>
+const WASM_B64 = "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QfADayIDJICAgIAAIAErAyhEAAAAAABAj0CjIgQgASsDSEQAAAAAAECPQKMiBaAiBiABKwMARClcj8L1KPA/oiABKwNAoiABKwNgoiIHIAKhIAErA1BEAAAAAABAj0CjIgijIgmiIQogBiAIoCILIAmaIgiiIQwgCyALIAmioiENIAYgBiAIoqIhDiALIAErA3BEAAAAAABAj0CjoCEPIAaaIRAgC5ohESADQShqIRJEAAAAAACAQUAhE0QAAAAAAABEQCEURAAAAAAAAFRAIRVBxwEhFiADQdAAaiIXQSBqIRgDQCAWIRkgASsDECEIIBQgFaBEAAAAAAAA4D+iRGZmZmZmEnFAoCIaRGZmZmZmEnFAoyIbROxRuB6F6+k/EICAgIAAIRwgG0QAAAAAAAD8PxCAgICAACEbIAhEGC1EVPshCUCiRAAAAAAAgGZAoxCBgICAACEdIAhEzczMzMzM/D+iRBgtRFT7IQlAokQAAAAAAIBmQKMQgoCAgABEmpmZmZmZ+T8QgICAgAAhHiAdIAUgBSAFRB+F61G4niNAIBqjIBUgFKGZIghEje21oPfGsD4gCESN7bWg98awPmQboqKioiAbRCEOyBRi5Os+oiIIIAhEuB6F61G45j+joqOiIh9EAAAAAADGtkCjEIOAgIAAISAgASsDGCEhIAErAwghGiABKwMwISIgASsDaCEjIAErAzghJCABKwMgIRsgASsDWCEIIAErA3ghHSADQgA3A+gDIAMgHTkD4AMgA0IANwPYAyADIAiaOQPQAyADQgA3A8gDIANCADcDwAMgA0KAgICAgICA+L9/NwO4AyADIBE5A7ADIANCgICAgICAgPg/NwOoAyADIAs5A6ADIANCADcDmAMgA0IANwOQAyADQgA3A4gDIANCADcDgAMgA0IANwP4AiADIAg5A/ACIANCADcD6AIgA0IANwPYAiADQgA3A9ACIANCgICAgICAgPi/fzcDyAIgAyAQOQPAAiADQoCAgICAgID4PzcDuAIgAyAGOQOwAiADQgA3A5gCIANCADcDkAIgA0IANwOIAiADQgA3A4ACIANCADcD+AEgA0IANwPwASADQgA3A+gBIANCADcD4AEgAyAdIBsgD6KgmjkDoAIgAyAGIAQgIqNEAAAAAAAA8D8gFERmZmZmZhJxQKAiIiAVRGZmZmZmEnFA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";
+const NOMES = ['G', 'Ta', 'beta', 'hw', 'hi', 'eg', 'kg', 'epsg', 'tau', 'gap', 'eabs', 'kabs', 'alpha', 'eps', 'eiso', 'kiso'];
+const BASE = { G: 800, Ta: 25, beta: 45, hw: 10, hi: 5, eg: 3.2, kg: 1.0, epsg: 0.88, tau: 0.91, gap: 25, eabs: 0.4, kabs: 237, alpha: 0.95, eps: 0.05, eiso: 25, kiso: 0.040 };
+const PRESETS = [
+  ['Bosch FCC220-2V (reprodutibilidade)', {}],
+  ['ST-182 (dados do TCC)', { eg: 4, gap: 16, eiso: 40 }],
+  ['Vaillant VFK 145/3 V', { eiso: 35, kiso: 0.035 }],
+  ['Viessmann Vitosol 100-FM', { tau: 0.916, eiso: 30, kiso: 0.035 }],
+  ['Absorvedor de cobre 0,2 mm', { eabs: 0.2, kabs: 385 }],
+];
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sci = v => v.toExponential(2).replace('.', ',');
+let W = null;
+
+async function carregar() {
+  const bin = Uint8Array.from(atob(WASM_B64), c => c.charCodeAt(0));
+  const { instance } = await WebAssembly.instantiate(bin, { env: { js_pow: Math.pow, js_cos: Math.cos, js_sin: Math.sin, js_cbrt: Math.cbrt } });
+  W = instance.exports;
+  $('core').className = 'core on';
+  $('core').lastElementChild.textContent = `núcleo C++ em WebAssembly · ${(bin.length / 1024).toFixed(1)} kB`;
+}
+
+function run() {
+  if (!W) return;
+  const p = {}; NOMES.forEach(k => p[k] = parseFloat($(k).value));
+  if (NOMES.some(k => !(p[k] > 0) && k !== 'Ta')) return;
+  const modo = +document.querySelector('input[name=modo]:checked').value, Tref = parseFloat($('Tref').value), nmax = +$('nmax').value;
+  const P = new Float64Array(W.memory.buffer, W.bp_params(), 16);
+  NOMES.forEach((k, i) => P[i] = p[k]);
+  const nl = W.bp_run(modo, Tref, nmax);
+  const o = new Float64Array(W.memory.buffer, W.bp_out(), 200);
+  const [Tp, Tmax, hg, k1, he, qf, qb, qx, S, L1, L2, L3, ok] = o;
+  const dT = Tp - p.Ta, bal = Math.abs(qf + qb + qx - S);
+  const rows = []; for (let k = 0; k < nl; k++) { const r = o.subarray(16 + 5 * k, 21 + 5 * k); rows.push({ n: r[0], N: r[1], h: r[2], nod: r[3], Er: r[4] }); }
+  let piso = false;
+  rows.forEach((r, i) => { if (i) { r.p = Math.log2(rows[i - 1].Er / r.Er); piso = piso || Math.abs(r.p - 2) >= .15; r.piso = piso; } });
+  const asym = rows.filter(r => r.p != null && !r.piso), pAvg = asym.reduce((s, r) => s + r.p, 0) / (asym.length || 1);
+  const nodMax = Math.max(...rows.map(r => r.nod));
+  const pill = (c, t) => `<span><span class="pill ${c}">${t}</span></span>`;
+  $('checks').innerHTML = [
+    ['Placa', `${fmt(Tp, 1)} °C`, modo && !ok ? `a estagnação não chega a ${fmt(Tref, 0)} °C; mostrada a estagnação` : `${qx > 0 ? `extração de ${fmt(qx, 0)} W/m²` : 'sem extração'}; T máx. no absorvedor ${fmt(Tmax, 2)} °C`, modo && !ok ? 'warn' : 'ok'],
+    ['Balanço', `${fmt(qf, 1)} + ${fmt(qb, 1)}${qx > 0 ? ' + ' + fmt(qx, 1) : ''}`, `frente + fundo${qx > 0 ? ' + fluido' : ''} = S = ${fmt(S, 1)} W/m² (resíduo ${sci(bal)})`, bal < 1e-6 * S ? 'ok' : 'warn'],
+    ['Perdas', `U = ${fmt((qf + qb) / dT)}`, `frente ${fmt(qf / dT)} + fundo ${fmt(qb / dT)} W/(m²·K); câmara h = ${fmt(hg)}, k₁ eq. = ${fmt(k1, 4)} W/(m·K)`, 'ok'],
+    ['Ordem do MEF', asym.length ? `p = ${fmt(pAvg, 2)}` : '—', `esperado 2 para elementos lineares; erro nodal máx. ${sci(nodMax)} K`, Math.abs(pAvg - 2) < .1 && nodMax < 1e-4 ? 'ok' : 'warn'],
+  ].map(([k, v, s, c]) => `<div class="check"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${s}</span>${pill(c, c === 'ok' ? 'confere' : 'atenção')}</div>`).join('');
+  $('tbl').innerHTML = `<thead><tr><th>n</th><th>nós</th><th>h<sub>II</sub> (mm)</th><th>erro nodal máx. (K)</th><th>E<sub>r</sub> (L²)</th><th>p</th></tr></thead><tbody>${rows.map(r =>
+    `<tr><td>${r.n}</td><td>${r.N}</td><td>${fmt(r.h, 5)}</td><td>${sci(r.nod)}</td><td>${sci(r.Er)}</td><td>${r.p == null ? '—' : fmt(r.p, 2) + (r.piso ? ' <span class="hip">(arredondamento)</span>' : '')}</td></tr>`).join('')}</tbody>`;
+  const N = o[56], nodes = []; for (let i = 0; i < N; i++) nodes.push([o[57 + 2 * i], o[58 + 2 * i]]);
+  draw([L1, L2, L3], nodes);
+  const dif = NOMES.filter(k => Math.abs(p[k] - BASE[k]) > 1e-12).map(k => `${k}=${p[k]}`);
+  if (modo) dif.unshift('caso=op');
+  $('cli').textContent = `baumplane_mef${dif.length ? ' ' + dif.join(' ') : ''}` + (modo && Tref !== 60 ? `\n(a linha de comando usa placa a 60 °C)` : '');
+}
+
+function draw(L, nodes) {
+  const box = $('chart'), Wd = Math.max(box.clientWidth, 300), H = 260, m = { l: 44, r: 14, t: 10, b: 38 }, L3 = L[2];
+  const xs = []; for (let i = 0; i <= 400; i++) xs.push(L3 * i / 400);
+  L.slice(0, 2).forEach(v => xs.push(v)); xs.sort((a, b) => a - b);
+  const Ts = xs.map(x => W.bp_T(x)), all = [...Ts, ...nodes.map(n => n[1])];
+  const span = Math.max(...all) - Math.min(...all), step = span > 100 ? 40 : span > 40 ? 20 : 10;
+  const tmin = Math.floor(Math.min(...all) / step) * step, tmax = Math.ceil(Math.max(...all) / step) * step;
+  const X = x => m.l + x / L3 * (Wd - m.l - m.r), Y = t => m.t + (1 - (t - tmin) / (tmax - tmin)) * (H - m.t - m.b);
+  let g = '';
+  [[0, L[0], 'I'], [L[0], L[1], 'II'], [L[1], L3, 'III']].forEach(([a, b, s], i) => g += `<rect x="${X(a)}" y="${m.t}" width="${Math.max(X(b) - X(a), 1)}" height="${H - m.t - m.b}" fill="var(--line)" opacity="${i === 1 ? .9 : i ? .35 : .18}"/><text x="${(X(a) + X(b)) / 2}" y="${m.t + 14}" text-anchor="middle">${s}</text>`);
+  for (let t = tmin; t <= tmax; t += step) g += `<line x1="${m.l}" x2="${Wd - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${Y(t) + 4}" text-anchor="end">${t}</text>`;
+  [[0, 'start'], [L[0], 'middle'], [L3, 'end']].forEach(([v, a]) => g += `<text x="${X(v)}" y="${H - m.b + 16}" text-anchor="${a}">${fmt(v * 1000, 1)}</text>`);
+  g += `<text x="${(Wd + m.l) / 2}" y="${H - 4}" text-anchor="middle">x (mm) · T (°C) · I frente, II absorvedor, III isolamento</text>`;
+  const path = xs.map((x, i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(Ts[i]).toFixed(1)}`).join('');
+  const dots = nodes.map(([x, t]) => `<circle cx="${X(x).toFixed(1)}" cy="${Y(t).toFixed(1)}" r="3.2" fill="var(--s2)"/>`).join('');
+  box.innerHTML = `<svg width="${Wd}" height="${H}" viewBox="0 0 ${Wd} ${H}" role="img" aria-label="Perfil de temperatura: solução analítica e nós do MEF">${g}<path d="${path}" fill="none" stroke="var(--s1)" stroke-width="2"/>${dots}</svg>`;
+}
+
+function aplicar(i) { const p = { ...BASE, ...PRESETS[i][1] }; NOMES.forEach(k => $(k).value = p[k]); run(); }
+$('preset').innerHTML = PRESETS.map(([n], i) => `<option value="${i}">${n}</option>`).join('') + '<option value="custom">Personalizado</option>';
+$('preset').addEventListener('change', e => { if (e.target.value !== 'custom') aplicar(+e.target.value); });
+$('f').addEventListener('input', e => { if (NOMES.includes(e.target.id)) $('preset').value = 'custom'; run(); });
+$('f').addEventListener('submit', e => e.preventDefault());
+window.addEventListener('resize', run);
+NOMES.forEach(k => $(k).value = BASE[k]);
+carregar().then(() => aplicar(0)).catch(err => { $('core').className = 'core err'; $('core').lastElementChild.textContent = 'não consegui carregar o núcleo WebAssembly: ' + err.message; });
+</script>
+
+</html>

@@ -5,6 +5,8 @@
 ! Precisão estendida: quádrupla (113 bits de mantissa) se o gfortran tiver; senão 80 bits (64 bits de mantissa):
 !            gfortran -O2 -DESTENDIDA baumplane_mef.F90 -o baumplane_mef_f_q
 ! Rodar:     baumplane_mef_f                     (FCC220-2V, estagnação)
+!            baumplane_mef_f saida=html          (também grava baumplane_relatorio.html com gráficos,
+!                                                 arquivos .dat e o script baumplane.gp do gnuplot)
 !            baumplane_mef_f caso=op             (operação com a placa a 60 °C)
 !            baumplane_mef_f eg=4 gap=16 eiso=40 (troca parâmetros: chave=valor)
 module baumplane
@@ -182,9 +184,15 @@ program baumplane_mef_f
   type(caso) :: C
   character(len=64) :: arg, k, v, prec
   integer :: i, j, eq, n, N_, e
-  logical :: op, piso
+  logical :: op, piso, html
+  integer :: nr, rn(8), rNn(8)                          ! linhas da tabela de convergência, para o relatório
+  real(wp) :: rh(8), rnod(8), rEr(8), rp(8)
+  logical :: rpiso(8)
+  integer :: u                                          ! relatório: unidade do arquivo e escalas dos gráficos
+  real(wp) :: ymin, ymax, lh0, lh1
+  real(wp), parameter :: FW = 640, FH = 300, FL = 56, FR = 16, FT = 14, FB = 44   ! figura (px)
 
-  P = PADRAO; op = .false.
+  P = PADRAO; op = .false.; html = .false.; nr = 0
   do i = 1, command_argument_count()
     call get_command_argument(i, arg)
     eq = index(arg, '=')
@@ -194,6 +202,9 @@ program baumplane_mef_f
     k = arg(:eq - 1); v = arg(eq + 1:)
     if (k == 'caso') then
       op = (v == 'op'); cycle
+    end if
+    if (k == 'saida') then
+      html = (v == 'html'); cycle
     end if
     j = 0                                        ! (findloc só existe a partir do gfortran 9)
     do eq = 1, NPAR
@@ -263,11 +274,194 @@ program baumplane_mef_f
           print '(2x,i3,2x,i5,3x,f9.5,3x,es18.2,3x,es9.2,3x,f5.2)', n, N_, h, nod, Er, p_
         end if
       end if
+      nr = nr + 1; rn(nr) = n; rNn(nr) = N_; rh(nr) = h; rnod(nr) = nod; rEr(nr) = Er
+      rp(nr) = 0; rpiso(nr) = piso; if (n > 1) rp(nr) = p_
       Eant = Er; n = 2*n
     end do
   end associate
+  if (html) call relatorio()
 
 contains
+  ! ---------- relatório: HTML com gráficos SVG + arquivos .dat + script do gnuplot ----------
+  subroutine relatorio()
+    integer :: i, N1
+    real(wp) :: x1(NODES), T1(NODES), xx, tmin, tmax
+    character(len=*), parameter :: LARANJA = '#d95926', AZUL = '#2a78d6'
+    associate (s => C%s)
+      N1 = malha(s%L1, s%L2, s%L3, 1, x1)
+      call mef(s, x1, N1, T1)
+      ! --- dados para gnuplot ---
+      open (newunit=u, file='baumplane_perfil.dat', status='replace')
+      write (u, '(a)') '# x (mm)   T analitica (C)'
+      do i = 0, 400
+        xx = s%L3*i/400; write (u, '(f12.5,1x,f14.6)') xx*1000, T_an(s, xx)
+      end do
+      close (u)
+      open (newunit=u, file='baumplane_nos.dat', status='replace')
+      write (u, '(a)') '# x (mm)   T MEF n=1 (C)'
+      do i = 1, N1
+        write (u, '(f12.5,1x,f14.6)') x1(i)*1000, T1(i)
+      end do
+      close (u)
+      open (newunit=u, file='baumplane_convergencia.dat', status='replace')
+      write (u, '(a)') '# n   nos   h_II (mm)   erro nodal max (K)   E_r (L2)   p'
+      do i = 1, nr
+        write (u, '(i4,1x,i5,1x,f10.5,2(1x,es12.4),1x,f8.3)') rn(i), rNn(i), rh(i), rnod(i), rEr(i), rp(i)
+      end do
+      close (u)
+      open (newunit=u, file='baumplane.gp', status='replace')
+      write (u, '(a)') '# gnuplot baumplane.gp  ->  baumplane_perfil.png e baumplane_convergencia.png'
+      write (u, '(a)') 'set terminal pngcairo size 900,500 font "Sans,12"'
+      write (u, '(a)') 'set output "baumplane_perfil.png"'
+      write (u, '(a)') 'set xlabel "x (mm)"; set ylabel "T (C)"; set grid; set key top left'
+      write (u, '(a,f0.4,a,f0.4,a)') 'set arrow from ', s%L1*1000, ',graph 0 to ', s%L1*1000, ',graph 1 nohead dt 2'
+      write (u, '(a,f0.4,a,f0.4,a)') 'set arrow from ', s%L2*1000, ',graph 0 to ', s%L2*1000, ',graph 1 nohead dt 2'
+      write (u, '(a)') 'plot "baumplane_perfil.dat" w l lw 2 lc rgb "'//AZUL//'" t "Analitica (6x6)", \'
+      write (u, '(a)') '     "baumplane_nos.dat" w p pt 7 ps 1.2 lc rgb "'//LARANJA//'" t "MEF, n = 1"'
+      write (u, '(a)') 'unset arrow; set output "baumplane_convergencia.png"'
+      write (u, '(a)') 'set logscale xy; set format y "10^{%L}"; set xlabel "h_{II} (mm)"; set ylabel "E_r (L2)"'
+      write (u, '(a)') 'f(x) = A*x**2; A = 1; fit [0.1:0.4] f(x) "baumplane_convergencia.dat" u 3:5 via A'
+      write (u, '(a)') 'plot "baumplane_convergencia.dat" u 3:5 w lp pt 7 lw 2 lc rgb "'//LARANJA//'" t "MEF", \'
+      write (u, '(a)') '     f(x) w l dt 2 lc rgb "#666666" t "inclinacao 2 (h^2)"'
+      close (u)
+
+      ! --- HTML com SVG ---
+      open (newunit=u, file='baumplane_relatorio.html', status='replace')
+      write (u, '(a)') '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
+      write (u, '(a)') '<meta name="viewport" content="width=device-width, initial-scale=1"><title>BaumPlane_MEF: relat'// &
+            'orio Fortran</title>'
+      write (u, '(a)') '<style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;'// &
+            'color:#1d2421}'
+      write (u, '(a)') 'h1{font:600 26px Georgia,serif;margin:0}table{border-collapse:collapse;width:100%;font:13px ui-'// &
+            'monospace,monospace}'
+      write (u, '(a)') 'td,th{padding:4px 8px;border-bottom:1px solid #ddd;text-align:right}th{color:#5d6863;font-weight:500}'
+      write (u, '(a)') '.m{color:#5d6863}svg{max-width:100%;height:auto}svg text{font:11px system-ui;fill:#5d6863}</sty'// &
+            'le></head><body>'
+      write (u, '(a)') '<h1>BaumPlane_MEF</h1><p class="m">Relatorio gerado pelo programa Fortran baumplane_mef.F90 ('// &
+                       trim(prec)//')</p>'
+      write (u, '(a)') '<table><tr><th style="text-align:left">Grandeza</th><th>Valor</th></tr>'
+      write (u, '(a,f0.3,a)') '<tr><td style="text-align:left">T placa</td><td>', C%Tp, ' &deg;C</td></tr>'
+      write (u, '(a,f0.2,a,f0.2,a,f0.2,a)') '<tr><td style="text-align:left">frente + fundo + fluido</td><td>', &
+            qf, ' + ', qb, ' + ', C%qExtr, ' W/m&sup2;</td></tr>'
+      write (u, '(a,f0.2,a)') '<tr><td style="text-align:left">S absorvido</td><td>', C%Sabs, ' W/m&sup2;</td></tr>'
+      write (u, '(a,f0.4,a)') '<tr><td style="text-align:left">U frente + fundo</td><td>', (qf + qb)/dT, ' W/(m&sup2;K)'// &
+            '</td></tr>'
+      write (u, '(a,f0.3,a,f0.4,a)') '<tr><td style="text-align:left">h camara / k1 equivalente</td><td>', C%hg, &
+            ' / ', s%k1, '</td></tr></table>'
+
+      ! perfil de temperatura
+      tmin = minval([(T_an(s, s%L3*i/400), i = 0, 400)]); tmax = maxval([(T_an(s, s%L3*i/400), i = 0, 400)])
+      ymin = 20*floor(tmin/20); ymax = 20*ceiling(tmax/20)
+      write (u, '(a)') '<h2>Perfil de temperatura</h2><p class="m"><span style="color:'//AZUL// &
+                       '">&#9473;</span> analitica (6x6) &nbsp; <span style="color:'//LARANJA//'">&#9679;</span> nos do'// &
+                             ' MEF, n = 1</p>'
+      write (u, '(a,i0,a,i0,a)') '<svg viewBox="0 0 ', nint(FW), ' ', nint(FH), '">'
+      call regiao(0._wp, s%L1, 'I'); call regiao(s%L1, s%L2, 'II'); call regiao(s%L2, s%L3, 'III')
+      xx = ymin
+      do while (xx <= ymax + 1e-9_wp)
+        write (u, '(a,f0.1,a,f0.1,a,f0.1,a,f0.1,a)') '<line x1="', FL, '" x2="', FW - FR, '" y1="', py(xx), '" y2="', py(xx), &
+              '" stroke="#e3e7e4"/>'
+        write (u, '(a,f0.1,a,f0.1,a,i0,a)') '<text x="', FL - 6, '" y="', py(xx) + 4, '" text-anchor="end">', nint(xx), &
+              '</text>'
+        xx = xx + 20
+      end do
+      write (u, '(a)', advance='no') '<path fill="none" stroke="'//AZUL//'" stroke-width="2" d="'
+      do i = 0, 400
+        xx = s%L3*i/400
+        if (i == 0) then
+          write (u, '(a,f0.1,a,f0.1)', advance='no') 'M', px(xx), ',', py(T_an(s, xx))
+        else
+          write (u, '(a,f0.1,a,f0.1)', advance='no') ' L', px(xx), ',', py(T_an(s, xx))
+        end if
+      end do
+      write (u, '(a)') '"/>'
+      do i = 1, N1
+        write (u, '(a,f0.1,a,f0.1,a)') '<circle cx="', px(x1(i)), '" cy="', py(T1(i)), '" r="3.5" fill="'//LARANJA//'"/>'
+      end do
+      write (u, '(a,f0.1,a,f0.1,a,f0.1,a)') '<text x="', (FW + FL)/2, '" y="', FH - 8, '" text-anchor="middle">x (mm), es'// &
+            'pessura total ', &
+            s%L3*1000, ' mm</text></svg>'
+
+      ! convergência em escala log-log
+      lh0 = log10(rh(nr)) - 0.15_wp; lh1 = log10(rh(1)) + 0.15_wp
+      ymax = ceiling(log10(maxval(rEr(1:nr))))         ! a faixa inclui o fim da reta de inclinação 2
+      ymin = floor(min(log10(minval(rEr(1:nr))), log10(rEr(1)) - 2*(log10(rh(1)) - log10(rh(nr)))))
+      write (u, '(a)') '<h2>Convergencia do MEF (log-log)</h2><p class="m"><span style="color:'//LARANJA// &
+                       '">&#9679;</span> E<sub>r</sub> (L&sup2;) &nbsp; <span>- - -</span> inclinacao 2 (h&sup2;)</p>'
+      write (u, '(a,i0,a,i0,a)') '<svg viewBox="0 0 ', nint(FW), ' ', nint(FH), '">'
+      xx = ymin
+      do while (xx <= ymax + 1e-9_wp)
+        write (u, '(a,f0.1,a,f0.1,a,f0.1,a,f0.1,a)') '<line x1="', FL, '" x2="', FW - FR, '" y1="', ly(xx), '" y2="', ly(xx), &
+              '" stroke="#e3e7e4"/>'
+        write (u, '(a,f0.1,a,f0.1,a,i0,a)') '<text x="', FL - 6, '" y="', ly(xx) + 4, '" text-anchor="end">1e', &
+              nint(xx), '</text>'
+        xx = xx + 1
+      end do
+      write (u, '(a,f0.1,a,f0.1,a,f0.1,a,f0.1,a)') '<line x1="', lx(log10(rh(1))), '" y1="', ly(log10(rEr(1))), &
+            '" x2="', lx(log10(rh(nr))), '" y2="', ly(log10(rEr(1)) - 2*(log10(rh(1)) - log10(rh(nr)))), &
+            '" stroke="#666" stroke-dasharray="5 4"/>'
+      write (u, '(a)', advance='no') '<path fill="none" stroke="'//LARANJA//'" stroke-width="2" d="'
+      do i = 1, nr
+        if (i == 1) then
+          write (u, '(a,f0.1,a,f0.1)', advance='no') 'M', lx(log10(rh(i))), ',', ly(log10(rEr(i)))
+        else
+          write (u, '(a,f0.1,a,f0.1)', advance='no') ' L', lx(log10(rh(i))), ',', ly(log10(rEr(i)))
+        end if
+      end do
+      write (u, '(a)') '"/>'
+      do i = 1, nr
+        write (u, '(a,f0.1,a,f0.1,a,f0.1,a,f0.1,a,f0.4,a)') '<circle cx="', lx(log10(rh(i))), '" cy="', ly(log10(rEr(i))), &
+              '" r="4" fill="'//LARANJA//'"/><text x="', lx(log10(rh(i))), '" y="', FH - FB + 16, '" text-anchor="middle'// &
+                    '">', rh(i), '</text>'
+      end do
+      write (u, '(a,f0.1,a,f0.1,a)') '<text x="', (FW + FL)/2, '" y="', FH - 8, '" text-anchor="middle">h_II (mm)</text></svg>'
+      write (u, '(a)') '<table><tr><th>n</th><th>nos</th><th>h_II (mm)</th><th>erro nodal (K)</th><th>E_r (L2)</th><th>'// &
+            'p</th></tr>'
+      do i = 1, nr
+        if (i == 1) then
+          write (u, '(a,i0,a,i0,a,f0.5,a,es9.2,a,es9.2,a)') '<tr><td>', rn(i), '</td><td>', rNn(i), '</td><td>', rh(i), &
+                '</td><td>', rnod(i), '</td><td>', rEr(i), '</td><td>-</td></tr>'
+        else
+          write (u, '(a,i0,a,i0,a,f0.5,a,es9.2,a,es9.2,a,f5.2,a)') '<tr><td>', rn(i), '</td><td>', rNn(i), '</td><td>', rh(i), &
+                '</td><td>', rnod(i), '</td><td>', rEr(i), '</td><td>', rp(i), merge(' (arred.)', '         ', &
+                      rpiso(i))//'</td></tr>'
+        end if
+      end do
+      write (u, '(a)') '</table><p class="m">Arquivos para o gnuplot: baumplane_perfil.dat, baumplane_nos.dat, '// &
+                       'baumplane_convergencia.dat e baumplane.gp.</p></body></html>'
+      close (u)
+    end associate
+    print '(a)', ''
+    print '(a)', '  gravados: baumplane_relatorio.html, baumplane_perfil.dat, baumplane_nos.dat,'
+    print '(a)', '            baumplane_convergencia.dat, baumplane.gp (gnuplot baumplane.gp gera os PNG)'
+  end subroutine
+
+  ! escalas dos gráficos SVG do relatório
+    real(wp) function px(xv)
+      real(wp), intent(in) :: xv
+      px = FL + xv/C%s%L3*(FW - FL - FR)
+    end function
+    real(wp) function py(tv)
+      real(wp), intent(in) :: tv
+      py = FT + (1 - (tv - ymin)/(ymax - ymin))*(FH - FT - FB)
+    end function
+    real(wp) function lx(lv)
+      real(wp), intent(in) :: lv
+      lx = FL + (lh1 - lv)/(lh1 - lh0)*(FW - FL - FR)          ! h decrescente para a direita
+    end function
+    real(wp) function ly(lv)
+      real(wp), intent(in) :: lv
+      ly = FT + (ymax - lv)/(ymax - ymin)*(FH - FT - FB)
+    end function
+    subroutine regiao(a, b, nome)
+      real(wp), intent(in) :: a, b
+      character(len=*), intent(in) :: nome
+      write (u, '(a,f0.1,a,f0.1,a,f0.1,a,f0.1,a)') '<rect x="', px(a), '" y="', FT, '" width="', max(px(b) - px(a), 1._wp), &
+            '" height="', FH - FT - FB, '" fill="#eef1ef"/>'
+      write (u, '(a,f0.1,a,f0.1,a)') '<text x="', (px(a) + px(b))/2, '" y="', FT + 14, '" text-anchor="middle"'// &
+            '>'//nome//'</text>'
+    end subroutine
+
   real(wp) function quadT2(a, b)
     real(wp), intent(in) :: a, b
     integer :: jj

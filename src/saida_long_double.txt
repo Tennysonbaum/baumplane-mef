@@ -1,0 +1,14 @@
+BaumPlane_colector: MEF 1D (estagnacao, long double)
+  placa T(L1)         = 169.971 C   (Tmax no absorvedor 169.971272 C)
+  h camara            = 4.708 W/m2K, k1 equivalente = 0.1308 W/mK, h externo = 16.21 W/m2K
+  balanco             : frente 522.79 + fundo 175.72 + fluido 0.00 = S 698.52 W/m2 (residuo 1.7e-15)
+  U frente + fundo    = 3.6062 + 1.2121 = 4.8183 W/m2K
+
+   n    nos   h_II (mm)   erro nodal max (K)   E_r (L2)      p
+    1     14     0.40000             5.05e-13    7.80e-08       -
+    2     27     0.20000             1.04e-13    1.95e-08    2.00
+    4     53     0.10000             3.31e-12    4.88e-09    2.00
+    8    105     0.05000             1.22e-10    1.22e-09    2.00
+   16    209     0.02500             3.14e-10    3.05e-10    2.00
+   32    417     0.01250             1.35e-09    7.56e-11    2.01
+   64    833     0.00625             5.76e-09    3.51e-11    1.11  (arredondamento)
